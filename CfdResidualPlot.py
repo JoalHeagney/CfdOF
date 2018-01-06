@@ -1,9 +1,8 @@
 # ***************************************************************************
 # *                                                                         *
-# *   Copyright (c) 2016 - Bernd Hahnebach <bernd@bimstatik.org>            *
 # *   Copyright (c) 2017 - Oliver Oxtoby (CSIR) <ooxtoby@csir.co.za>        *
-# *   Copyright (c) 2017 - Alfred Bogaers (CSIR) <abogaers@csir.co.za>      *
 # *   Copyright (c) 2017 - Johan Heyns (CSIR) <jheyns@csir.co.za>           *
+# *   Copyright (c) 2017 - Alfred Bogaers (CSIR) <abogaers@csir.co.za>      *
 # *                                                                         *
 # *   This program is free software; you can redistribute it and/or modify  *
 # *   it under the terms of the GNU Lesser General Public License (LGPL)    *
@@ -23,47 +22,48 @@
 # *                                                                         *
 # ***************************************************************************
 
-__title__ = "Command to add CFD fluid boundary"
-__author__ = ""
-__url__ = "http://www.freecadweb.org"
-
-## @package CommandCfdFluidBoundary
-#  \ingroup CFD
-
-import FreeCAD
-import platform
-try:
-    from femcommands.manager import CommandManager
-except ImportError:  # Backward compatibility
-    from PyGui.FemCommands import FemCommands as CommandManager
-import FreeCADGui
 from PySide import QtCore
-import os
-import CfdTools
+import FreeCAD
+import Plot
 
 
-class _CommandCfdFluidBoundary(CommandManager):
-    """ The Fem_CfdFluidBoundary command definition """
+class ResidualPlot:
     def __init__(self):
-        super(_CommandCfdFluidBoundary, self).__init__()
-        self.resources = self.GetResources()
-        self.is_active = 'with_analysis'
+        self.fig = Plot.figure(FreeCAD.ActiveDocument.Name + "Residuals")
 
-    def Activated(self):
-        FreeCAD.ActiveDocument.openTransaction("Create CfdFluidBoundary")
-        FreeCADGui.addModule("FemGui")
-        FreeCADGui.addModule("CfdFluidBoundary")
-        FreeCADGui.doCommand("FemGui.getActiveAnalysis().addObject(CfdFluidBoundary.makeCfdFluidBoundary())")
-        FreeCADGui.ActiveDocument.setEdit(FreeCAD.ActiveDocument.ActiveObject.Name)
+        self.updated = False
+        self.UxResiduals = []
+        self.UyResiduals = []
+        self.UzResiduals = []
+        self.pResiduals = []
 
-    def GetResources(self):
-        icon_path = os.path.join(CfdTools.get_module_path(), "Gui", "Resources", "icons", "boundary.png")
-        return {
-            'Pixmap': icon_path,
-            'MenuText': QtCore.QT_TRANSLATE_NOOP("Cfd_FluidBoundary", "Fluid boundary"),
-            'Accel': "C, W",
-            'ToolTip': QtCore.QT_TRANSLATE_NOOP("Cfd_FluidBoundary", "Creates a CFD fluid boundary")}
+        self.Timer = QtCore.QTimer()
+        self.Timer.timeout.connect(self.refresh)
+        self.Timer.start(2000)
 
+    def updateResiduals(self, UxResiduals, UyResiduals, UzResiduals, pResiduals):
+        self.updated = True
+        self.UxResiduals = UxResiduals
+        self.UyResiduals = UyResiduals
+        self.UzResiduals = UzResiduals
+        self.pResiduals = pResiduals
 
-if FreeCAD.GuiUp:
-    FreeCADGui.addCommand('Cfd_FluidBoundary', _CommandCfdFluidBoundary())
+    def refresh(self):
+        if self.updated:
+            self.updated = False
+            ax = self.fig.axes
+            ax.cla()
+            ax.set_title("Simulation residuals")
+            ax.set_xlabel("Iteration")
+            ax.set_ylabel("Residual")
+
+            ax.plot(self.UxResiduals, label="$U_x$", color='violet', linewidth=1)
+            ax.plot(self.UyResiduals, label="$U_y$", color='green', linewidth=1)
+            ax.plot(self.UzResiduals, label="$U_z$", color='blue', linewidth=1)
+            ax.plot(self.pResiduals, label="$p$", color='orange', linewidth=1)
+
+            ax.grid()
+            ax.set_yscale('log')
+            ax.legend()
+
+            self.fig.canvas.draw()
